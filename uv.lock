@@ -78,15 +78,19 @@ wheels = [
 ]
 
 [[package]]
-name = "doctown-v11"
-version = "0.1.0"
+name = "doctown"
+version = "11.0.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "scikit-learn" },
     { name = "sentence-transformers" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "sentence-transformers", specifier = ">=5.1.2" }]
+requires-dist = [
+    { name = "scikit-learn", specifier = ">=1.7.2" },
+    { name = "sentence-transformers", specifier = ">=5.1.2" },
+]
 
 [[package]]
 name = "filelock"

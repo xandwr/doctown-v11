@@ -95,7 +95,7 @@ Non-responsibilities:
 ---
 
 ## cluster/
-### Status: Not Started
+### Status: Complete
 Purpose: Group embeddings into coherent topic clusters.
 
 Responsibilities:
