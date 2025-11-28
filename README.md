@@ -65,7 +65,7 @@ Non-responsibilities:
 ---
 
 ## chunk/
-### Status: Not Started
+### Status: Complete
 Purpose: Convert semantic units into embedding-ready chunks under token limits.
 
 Responsibilities:
