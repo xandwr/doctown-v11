@@ -7,4 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "scikit-learn>=1.7.2",
     "sentence-transformers>=5.1.2",
+    "transformers>=4.47.0",
+    "torch>=2.0.0",
 ]

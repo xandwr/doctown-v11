@@ -34,6 +34,7 @@ from parse import parse_files, ParsedFile, ParseError
 from chunk import chunk_parsed_files, get_all_chunks
 from embed import embed_chunks
 from cluster import cluster_embeddings, ClusterResult
+from summarize import summarize_all_clusters, SummaryResult
 
 
 # ============================================================
@@ -64,6 +65,12 @@ class PipelineConfig:
     k_range_min: int = 2
     k_range_max: int = 10
 
+    # Summarize settings
+    summarize_model: str = "Qwen/Qwen3-1.7B"
+    generate_project_summary: bool = True
+    max_chunks_per_cluster: int = 10
+    summarize_load_in_8bit: bool = False
+
 
 # ============================================================
 # Pipeline Statistics
@@ -78,6 +85,7 @@ class PipelineStats:
     chunk_time: float = 0.0
     embed_time: float = 0.0
     cluster_time: float = 0.0
+    summarize_time: float = 0.0
     total_time: float = 0.0
 
     # Stage outputs
@@ -86,6 +94,7 @@ class PipelineStats:
     chunks_created: int = 0
     embeddings_dimension: int = 0
     clusters_found: int = 0
+    summaries_generated: int = 0
 
     # Additional metrics
     total_bytes: int = 0
@@ -99,13 +108,14 @@ class PipelineStats:
         print("=" * 70)
 
         print("\nStage Timings:")
-        print(f"  Ingest:   {self.ingest_time:>8.2f}s  ({self.files_ingested} files, {self.total_bytes/1024/1024:.1f} MB)")
-        print(f"  Parse:    {self.parse_time:>8.2f}s  ({self.files_parsed} files, {self.total_lines} lines)")
-        print(f"  Chunk:    {self.chunk_time:>8.2f}s  ({self.chunks_created} chunks)")
-        print(f"  Embed:    {self.embed_time:>8.2f}s  ({self.embeddings_dimension}D embeddings)")
-        print(f"  Cluster:  {self.cluster_time:>8.2f}s  ({self.clusters_found} clusters)")
+        print(f"  Ingest:     {self.ingest_time:>8.2f}s  ({self.files_ingested} files, {self.total_bytes/1024/1024:.1f} MB)")
+        print(f"  Parse:      {self.parse_time:>8.2f}s  ({self.files_parsed} files, {self.total_lines} lines)")
+        print(f"  Chunk:      {self.chunk_time:>8.2f}s  ({self.chunks_created} chunks)")
+        print(f"  Embed:      {self.embed_time:>8.2f}s  ({self.embeddings_dimension}D embeddings)")
+        print(f"  Cluster:    {self.cluster_time:>8.2f}s  ({self.clusters_found} clusters)")
+        print(f"  Summarize:  {self.summarize_time:>8.2f}s  ({self.summaries_generated} summaries)")
         print(f"  {'─' * 40}")
-        print(f"  Total:    {self.total_time:>8.2f}s")
+        print(f"  Total:      {self.total_time:>8.2f}s")
 
         if self.cluster_silhouette is not None:
             print(f"\nCluster Quality:")
@@ -402,6 +412,49 @@ def stage_cluster(embeddings, config: PipelineConfig) -> ClusterResult:
     return result, elapsed
 
 
+def stage_summarize(chunks, cluster_result: ClusterResult, config: PipelineConfig) -> SummaryResult:
+    """
+    Stage 6: Generate summaries for clusters.
+
+    Args:
+        chunks: List of Chunk objects
+        cluster_result: ClusterResult from clustering stage
+        config: Pipeline configuration
+
+    Returns:
+        SummaryResult object
+    """
+    print("\n" + "=" * 70)
+    print("STAGE 6: SUMMARIZE")
+    print("=" * 70)
+
+    start_time = time.time()
+
+    print(f"\nGenerating summaries for {cluster_result.n_clusters} clusters...")
+    print(f"  Model: {config.summarize_model}")
+    print(f"  Max chunks per cluster: {config.max_chunks_per_cluster}")
+    print(f"  Project summary: {config.generate_project_summary}")
+
+    summary_result = summarize_all_clusters(
+        chunks=chunks,
+        cluster_labels=cluster_result.labels,
+        model_name=config.summarize_model,
+        generate_project_summary=config.generate_project_summary,
+        max_chunks_per_cluster=config.max_chunks_per_cluster,
+        load_in_8bit=config.summarize_load_in_8bit,
+        verbose=True,
+    )
+
+    elapsed = time.time() - start_time
+
+    print(f"\n✓ Summarization complete in {elapsed:.2f}s")
+    print(f"  Generated {len(summary_result.cluster_summaries)} cluster summaries")
+    if summary_result.project_summary:
+        print(f"  Generated project overview")
+
+    return summary_result, elapsed
+
+
 # ============================================================
 # Main Pipeline
 # ============================================================
@@ -460,6 +513,11 @@ def run_pipeline(
         stats.cluster_time = cluster_time
         stats.clusters_found = cluster_result.n_clusters
         stats.cluster_silhouette = cluster_result.silhouette
+
+        # Stage 6: Summarize
+        summary_result, summarize_time = stage_summarize(chunks, cluster_result, config)
+        stats.summarize_time = summarize_time
+        stats.summaries_generated = len(summary_result.cluster_summaries)
 
         # Calculate total time
         stats.total_time = time.time() - pipeline_start
@@ -550,6 +608,22 @@ Examples:
         default=512,
         help="Maximum tokens per chunk (default: 512)"
     )
+    parser.add_argument(
+        "--summarize-model",
+        default="Qwen/Qwen3-1.7B",
+        help="Summarization model (default: Qwen/Qwen3-1.7B)"
+    )
+    parser.add_argument(
+        "--no-project-summary",
+        action="store_false",
+        dest="project_summary",
+        help="Skip generating project-level summary"
+    )
+    parser.add_argument(
+        "--load-in-8bit",
+        action="store_true",
+        help="Load summarization model in 8-bit to save memory"
+    )
 
     args = parser.parse_args()
 
@@ -581,6 +655,9 @@ Examples:
         cluster_algorithm=args.cluster_algorithm,
         embed_model=args.embed_model,
         max_tokens=args.max_tokens,
+        summarize_model=args.summarize_model,
+        generate_project_summary=args.project_summary,
+        summarize_load_in_8bit=args.load_in_8bit,
     )
 
     # Run pipeline

@@ -110,13 +110,14 @@ Non-responsibilities:
 ---
 
 ## summarize/
-### Status: Not Started
+### Status: Complete
 Purpose: Generate natural-language summaries for each cluster and optionally for the whole project.
 
 Responsibilities:
 - Handle prompt templates
-- Use local LLM (e.g., Qwen, DeepSeek) for summarization
+- Use local LLM (Qwen/Qwen3-1.7B) for summarization
 - Output short and long-form summaries
+- Generate project-level overview from cluster summaries
 
 Non-responsibilities:
 - No clustering, no chunking
@@ -137,7 +138,7 @@ Non-responsibilities:
 ---
 
 ## main.py
-### Status: Complete (up to cluster stage)
+### Status: Complete (up to summarize stage)
 Top-level orchestrator.
 
 Responsibilities:
