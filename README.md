@@ -47,12 +47,12 @@ Non-responsibilities:
 ---
 
 ## parse/
-### Status: Not Started
+### Status: Complete
 Purpose: Convert raw file bytes into structured, normalized UTF-8 text + semantic units.
 
 Responsibilities:
 - Detect file type heuristically
-- Run appropriate parser (plain text fallback)
+- Run appropriate parser (plain text fallback, returns just the name of exec. if binary or blob-like)
 - Produce:
   - normalized_text
   - metadata (path, ext, language, size, line count)
