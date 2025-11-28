@@ -137,7 +137,7 @@ Non-responsibilities:
 ---
 
 ## main.py
-### Status: Not Started
+### Status: Complete (up to cluster stage)
 Top-level orchestrator.
 
 Responsibilities:
