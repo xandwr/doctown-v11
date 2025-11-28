@@ -30,6 +30,7 @@ The v11 design philosophy:
 ---
 
 ## ingest/
+### Status: Complete
 Purpose: Load input repositories or ZIP files into a normalized virtual file system (VFS) without writing anything to disk.
 
 Responsibilities:
@@ -46,6 +47,7 @@ Non-responsibilities:
 ---
 
 ## parse/
+### Status: Not Started
 Purpose: Convert raw file bytes into structured, normalized UTF-8 text + semantic units.
 
 Responsibilities:
@@ -63,6 +65,7 @@ Non-responsibilities:
 ---
 
 ## chunk/
+### Status: Not Started
 Purpose: Convert semantic units into embedding-ready chunks under token limits.
 
 Responsibilities:
@@ -78,6 +81,7 @@ Non-responsibilities:
 ---
 
 ## embed/
+### Status: Not Started
 Purpose: GPU-accelerated embeddings via SentenceTransformers or local HF models.
 
 Responsibilities:
@@ -91,6 +95,7 @@ Non-responsibilities:
 ---
 
 ## cluster/
+### Status: Not Started
 Purpose: Group embeddings into coherent topic clusters.
 
 Responsibilities:
@@ -105,6 +110,7 @@ Non-responsibilities:
 ---
 
 ## summarize/
+### Status: Not Started
 Purpose: Generate natural-language summaries for each cluster and optionally for the whole project.
 
 Responsibilities:
@@ -118,6 +124,7 @@ Non-responsibilities:
 ---
 
 ## docpack/
+### Status: Not Started
 Purpose: Assemble final documentation bundle.
 
 Responsibilities:
@@ -130,6 +137,7 @@ Non-responsibilities:
 ---
 
 ## main.py
+### Status: Not Started
 Top-level orchestrator.
 
 Responsibilities:
