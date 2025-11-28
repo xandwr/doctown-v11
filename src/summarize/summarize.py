@@ -7,18 +7,26 @@ from typing import List, Optional
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+# Import qwen-agent for better LLM handling
+try:
+    from qwen_agent.llm import get_chat_model
+    QWEN_AGENT_AVAILABLE = True
+except ImportError:
+    QWEN_AGENT_AVAILABLE = False
+    print("Warning: qwen-agent not available. Install with: uv pip install qwen-agent")
+
 
 # ============================================================
 # Configuration
 # ============================================================
 
 # Default model for summarization
-DEFAULT_MODEL_NAME = "Qwen/Qwen3-1.7B"
+DEFAULT_MODEL_NAME = "Qwen/Qwen3-4B"
 
 # Generation parameters
 DEFAULT_MAX_LENGTH = 150  # Maximum tokens in summary
 DEFAULT_MIN_LENGTH = 30   # Minimum tokens in summary
-DEFAULT_TEMPERATURE = 0.7
+DEFAULT_TEMPERATURE = 0.2
 DEFAULT_TOP_P = 0.9
 DEFAULT_TOP_K = 50
 
@@ -137,7 +145,7 @@ class SummaryModel:
         )
 
         if not load_in_8bit:
-            self.model = self.model.to(self.device)
+            self.model = self.model.to(self.device) # type: ignore
 
         self.model.eval()
 
@@ -166,13 +174,26 @@ class SummaryModel:
         Returns:
             Generated summary text
         """
+        # Apply chat template if available (for Qwen and other chat models)
+        if hasattr(self.tokenizer, 'apply_chat_template'):
+            messages = [{"role": "user", "content": prompt}]
+            formatted_prompt = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
+            )
+        else:
+            formatted_prompt = prompt
+
         # Tokenize input
         inputs = self.tokenizer(
-            prompt,
+            formatted_prompt,
             return_tensors="pt",
             truncation=True,
             max_length=2048,  # Context window limit
         ).to(self.device)
+
+        input_length = inputs.input_ids.shape[1]
 
         # Generate
         with torch.no_grad():
@@ -188,14 +209,14 @@ class SummaryModel:
                 eos_token_id=self.tokenizer.eos_token_id,
             )
 
-        # Decode output
-        generated_text = self.tokenizer.decode(
-            outputs[0],
-            skip_special_tokens=True
-        )
+        # CRITICAL FIX: Only decode the newly generated tokens, not the input
+        # This prevents the prompt from being included in the output
+        generated_tokens = outputs[0][input_length:]
 
-        # Extract only the generated part (after the prompt)
-        summary = generated_text[len(prompt):].strip()
+        summary = self.tokenizer.decode(
+            generated_tokens,
+            skip_special_tokens=True
+        ).strip()
 
         return summary
 

@@ -9,4 +9,5 @@ dependencies = [
     "sentence-transformers>=5.1.2",
     "transformers>=4.47.0",
     "torch>=2.0.0",
+    "qwen-agent[code-interpreter,gui,mcp,rag]>=0.0.31",
 ]
