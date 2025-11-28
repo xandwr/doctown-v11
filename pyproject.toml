@@ -1,0 +1,9 @@
+[project]
+name = "doctown"
+version = "11.0.0"
+description = "Kill me at this point. Version eleven incoming."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "sentence-transformers>=5.1.2",
+]
