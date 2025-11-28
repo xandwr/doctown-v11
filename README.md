@@ -81,7 +81,7 @@ Non-responsibilities:
 ---
 
 ## embed/
-### Status: Not Started
+### Status: Complete
 Purpose: GPU-accelerated embeddings via SentenceTransformers or local HF models.
 
 Responsibilities:
