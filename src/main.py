@@ -16,13 +16,24 @@ Examples:
     python main.py https://github.com/xandwr/localdoc
     python main.py --url https://github.com/octocat/Hello-World --branch main
     python main.py --path ~/projects/myrepo
+    python main.py https://github.com/owner/repo -o output --docpack-name myproject.docpack
+
+Output:
+    Creates a .docpack.zip file containing:
+    - metadata.json (pipeline configuration and stats)
+    - files.json (original file metadata)
+    - chunks.json (chunk metadata)
+    - clusters.json (cluster assignments)
+    - embeddings.npy (numpy array of embeddings)
+    - text/ (original files and chunks)
+    - summaries/ (cluster and project summaries)
 """
 
 import argparse
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from dataclasses import dataclass
 
 # Add src directory to path for imports
@@ -35,6 +46,7 @@ from chunk import chunk_parsed_files, get_all_chunks
 from embed import embed_chunks
 from cluster import cluster_embeddings, ClusterResult
 from summarize import summarize_all_clusters, SummaryResult
+from docpack import generate_docpack, DocpackConfig, DocpackResult
 
 
 # ============================================================
@@ -71,6 +83,12 @@ class PipelineConfig:
     max_chunks_per_cluster: int = 10
     summarize_load_in_8bit: bool = False
 
+    # Docpack settings
+    output_dir: str = "output"
+    docpack_name: str = "project.docpack"
+    compress_to_zip: bool = True
+    keep_uncompressed: bool = False
+
 
 # ============================================================
 # Pipeline Statistics
@@ -86,6 +104,7 @@ class PipelineStats:
     embed_time: float = 0.0
     cluster_time: float = 0.0
     summarize_time: float = 0.0
+    docpack_time: float = 0.0
     total_time: float = 0.0
 
     # Stage outputs
@@ -100,6 +119,8 @@ class PipelineStats:
     total_bytes: int = 0
     total_lines: int = 0
     cluster_silhouette: Optional[float] = None
+    docpack_path: Optional[str] = None
+    docpack_size_mb: Optional[float] = None
 
     def print_summary(self):
         """Print a formatted summary of pipeline statistics."""
@@ -114,12 +135,17 @@ class PipelineStats:
         print(f"  Embed:      {self.embed_time:>8.2f}s  ({self.embeddings_dimension}D embeddings)")
         print(f"  Cluster:    {self.cluster_time:>8.2f}s  ({self.clusters_found} clusters)")
         print(f"  Summarize:  {self.summarize_time:>8.2f}s  ({self.summaries_generated} summaries)")
+        print(f"  Docpack:    {self.docpack_time:>8.2f}s  ({self.docpack_size_mb:.1f} MB)" if self.docpack_size_mb else "")
         print(f"  {'─' * 40}")
         print(f"  Total:      {self.total_time:>8.2f}s")
 
         if self.cluster_silhouette is not None:
             print(f"\nCluster Quality:")
             print(f"  Silhouette Score: {self.cluster_silhouette:.3f} (range: -1 to 1, higher is better)")
+
+        if self.docpack_path:
+            print(f"\nOutput:")
+            print(f"  Docpack: {self.docpack_path}")
 
         print("\nPipeline Status: ✓ Complete")
         print("=" * 70)
@@ -455,6 +481,73 @@ def stage_summarize(chunks, cluster_result: ClusterResult, config: PipelineConfi
     return summary_result, elapsed
 
 
+def stage_docpack(
+    parsed_files: List[ParsedFile],
+    chunks,
+    embeddings,
+    cluster_result: ClusterResult,
+    summary_result: SummaryResult,
+    config: PipelineConfig,
+    url: Optional[str] = None,
+    path: Optional[str] = None,
+) -> tuple[DocpackResult, float]:
+    """
+    Stage 7: Generate docpack bundle.
+
+    Args:
+        parsed_files: List of parsed files
+        chunks: List of chunks
+        embeddings: Embeddings array
+        cluster_result: Clustering result
+        summary_result: Summarization result
+        config: Pipeline configuration
+        url: GitHub URL (if applicable)
+        path: Local path (if applicable)
+
+    Returns:
+        Tuple of (DocpackResult, elapsed_time)
+    """
+    start_time = time.time()
+
+    # Build docpack config
+    docpack_config = DocpackConfig(
+        output_dir=config.output_dir,
+        docpack_name=config.docpack_name,
+        compress_to_zip=config.compress_to_zip,
+        keep_uncompressed=config.keep_uncompressed,
+        embed_model=config.embed_model,
+        summarizer_model=config.summarize_model,
+        chunk_target_tokens=config.target_tokens,
+        chunk_min_tokens=config.min_tokens,
+        chunk_max_tokens=config.max_tokens,
+    )
+
+    # Set source information
+    if url:
+        owner, repo, branch = parse_github_url(url)
+        docpack_config.source_type = "github"
+        docpack_config.source_owner = owner
+        docpack_config.source_repo = repo
+        docpack_config.source_branch = branch
+    elif path:
+        docpack_config.source_type = "local"
+        docpack_config.source_path = path
+
+    # Generate docpack
+    docpack_result = generate_docpack(
+        parsed_files=parsed_files,
+        chunks=chunks,
+        embeddings=embeddings,
+        cluster_result=cluster_result,
+        summary_result=summary_result,
+        config=docpack_config,
+    )
+
+    elapsed = time.time() - start_time
+
+    return docpack_result, elapsed
+
+
 # ============================================================
 # Main Pipeline
 # ============================================================
@@ -518,6 +611,15 @@ def run_pipeline(
         summary_result, summarize_time = stage_summarize(chunks, cluster_result, config)
         stats.summarize_time = summarize_time
         stats.summaries_generated = len(summary_result.cluster_summaries)
+
+        # Stage 7: Docpack
+        docpack_result, docpack_time = stage_docpack(
+            parsed_files, chunks, embeddings, cluster_result, summary_result,
+            config, url, path
+        )
+        stats.docpack_time = docpack_time
+        stats.docpack_path = docpack_result.docpack_path
+        stats.docpack_size_mb = docpack_result.total_size_bytes / 1024 / 1024
 
         # Calculate total time
         stats.total_time = time.time() - pipeline_start
@@ -624,6 +726,27 @@ Examples:
         action="store_true",
         help="Load summarization model in 8-bit to save memory"
     )
+    parser.add_argument(
+        "--output-dir", "-o",
+        default="output",
+        help="Output directory for docpack (default: output)"
+    )
+    parser.add_argument(
+        "--docpack-name",
+        default="project.docpack",
+        help="Name of the docpack file (default: project.docpack)"
+    )
+    parser.add_argument(
+        "--no-zip",
+        action="store_false",
+        dest="compress_to_zip",
+        help="Skip compressing docpack to ZIP file"
+    )
+    parser.add_argument(
+        "--keep-uncompressed",
+        action="store_true",
+        help="Keep uncompressed docpack directory after zipping"
+    )
 
     args = parser.parse_args()
 
@@ -658,6 +781,10 @@ Examples:
         summarize_model=args.summarize_model,
         generate_project_summary=args.project_summary,
         summarize_load_in_8bit=args.load_in_8bit,
+        output_dir=args.output_dir,
+        docpack_name=args.docpack_name,
+        compress_to_zip=args.compress_to_zip,
+        keep_uncompressed=args.keep_uncompressed,
     )
 
     # Run pipeline
